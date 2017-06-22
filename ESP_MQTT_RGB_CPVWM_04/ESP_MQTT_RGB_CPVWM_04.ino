@@ -4,37 +4,39 @@
 
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
-#include "DHT.h"
+#include <ArduinoJson.h>
+#include <Adafruit_NeoPixel.h>
 
-#define DHTPIN D4     // what pin we're connected to
-//#define DHTTYPE DHT22   // DHT 22  (AM2302)
-#define DHTTYPE DHT11   // DHT 11
-DHT dht(DHTPIN, DHTTYPE);
-
-#define MSGINTVL 10000
 #define PRESMSGINTVL 30000
 
-const char* ssid     = "comPVter";
-const char* password = "PVassword"; //add wifi password here!
+#define PIN D2
 
-const char* mqtt_server = "samuele.ddns.net"; //Add mqtt broker here
+const char* ssid     = "comPVter";
+const char* password = ""; //add wifi password here!
+
+const char* mqtt_server = ""; //Add mqtt broker here
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-long lastMsg = 0;
+// When we setup the NeoPixel library, we tell it how many pixels, and which pin to use to send signals.
+// Note that for older NeoPixel strips you might need to change the third parameter--see the strandtest
+// example for more information on possible values.
+Adafruit_NeoPixel pixels = Adafruit_NeoPixel(1, PIN, NEO_GRB + NEO_KHZ800);
 long lastPresMsg = 0;
 char msg[60];
 int value = 0;
 
-const char* nodeId = "CPVWM01"; // ## unique serial number of the node! 01,02...
+const char* nodeId = "CPVWM##"; // ## unique serial number of the node! 01,02...
 
 void setup() {
   pinMode(BUILTIN_LED, OUTPUT);     // Initialize the BUILTIN_LED pin as an output
   digitalWrite(BUILTIN_LED,HIGH);
   Serial.begin(115200);
   setup_wifi();
-  dht.begin();
+  
+  pinMode(relayPin, OUTPUT);
+  
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
 }
@@ -58,18 +60,39 @@ void setup_wifi() {
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
-
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
+  String  message = "";
+
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("] ");
   for (int i = 0; i < length; i++) {
-    Serial.print((char)payload[i]);
+    message += (char)payload[i];
   }
+  Serial.print(message);
   Serial.println();
 
+  StaticJsonBuffer<100> jsonBuffer;
+
+  JsonObject& root = jsonBuffer.parseObject(message);
+  
+  String trigger = root["trigger"];   Serial.print("trigger: ");    Serial.println(trigger);
+  if (trigger == "double")
+  {
+    Serial.println("double click");
+    
+  }
+    if (trigger == "long")
+  {
+    Serial.println("Long click");
+    int R = micros()%255; Serial.print("R: "); Serial.print(R); Serial.print("\t");
+    int G = micros()%255; Serial.print("G: "); Serial.print(G); Serial.print("\t");
+    int B = micros()%255; Serial.print("B: "); Serial.print(B); Serial.print("\r\n");
+    pixels.setPixelColor(0, pixels.Color(i * 255, j * 255, k * 255)); 
+    pixels.show(); // This sends the updated pixel color to the hardware
+  }
 }
 
 void reconnect() {
@@ -85,7 +108,8 @@ void reconnect() {
       // Once connected, publish an announcement...
       client.publish("compvter/presentations", nodeId);
       // ... and resubscribe
-      //client.subscribe("Metrics");
+      client.subscribe("compvter/CPVWM03/actions");
+      client.subscribe("compvter/actions");
       digitalWrite(BUILTIN_LED,LOW);
     } else {
       Serial.print("failed, rc=");
@@ -98,52 +122,13 @@ void reconnect() {
 }
 void loop()
 {
+
   if (!client.connected()) {
-    digitalWrite(BUILTIN_LED,HIGH);
     reconnect();
   }
   client.loop();
 
-  long now = millis();
-  if ((now - lastMsg > MSGINTVL)) {
-    lastMsg = now;
-    // Reading temperature or humidity takes about 250 milliseconds!
-    // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
-    float h = dht.readHumidity();
-    // Read temperature as Celsius (the default)
-    float t = dht.readTemperature();
-
-    float hi = dht.computeHeatIndex(t, h, false);
-
-    int hint = 1000 * h;
-    int tint = 1000 * t;
-    int hiint = 1000 * hi;
-
-    // Check if any reads failed and exit early (to try again).
-    if (isnan(h) || isnan(t) ) {
-      Serial.println("Failed to read from DHT sensor!");
-      client.publish("Errors", "Failed to read from DHT sensor!");
-      return;
-    }
-
-    Serial.print("Humidity: ");
-    Serial.print(h);
-    Serial.print(" %\t");
-    Serial.print("Temperature: ");
-    Serial.print(t);
-    Serial.print(" *C ");
-    Serial.print("Heat index: ");
-    Serial.print(hi);
-    Serial.println(" *C");
-
-    sprintf(msg, "{\"NID\": \"CPVWM01\", \"sensor\": \"DHT11\", \"T\":%d, \"RH\":%d}", (int)t, (int)h);
-
-    Serial.print("Publish message: ");
-    Serial.println(msg);
-    client.publish("compvter/CPVWM01/metrics", msg);
-  }
-
-  now = millis();
+  long int now = millis();
   if ( (now - lastPresMsg) > PRESMSGINTVL)
   {
     lastPresMsg = now;
