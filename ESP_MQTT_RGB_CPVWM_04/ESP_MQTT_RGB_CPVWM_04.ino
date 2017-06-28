@@ -11,10 +11,10 @@
 
 #define PIN D2
 
-const char* ssid     = "comPVter";
-const char* password = ""; //add wifi password here!
+const char* ssid     = "Kalpanet";
+const char* password = "kalpak4194"; //add wifi password here!
 
-const char* mqtt_server = ""; //Add mqtt broker here
+const char* mqtt_server = "samuele.ddns.net"; //Add mqtt broker here
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -35,7 +35,8 @@ void setup() {
   Serial.begin(115200);
   setup_wifi();
   
-  pinMode(relayPin, OUTPUT);
+
+  pixels.begin();
   
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
@@ -78,21 +79,13 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
   JsonObject& root = jsonBuffer.parseObject(message);
   
-  String trigger = root["trigger"];   Serial.print("trigger: ");    Serial.println(trigger);
-  if (trigger == "double")
-  {
-    Serial.println("double click");
-    
-  }
-    if (trigger == "long")
-  {
-    Serial.println("Long click");
-    int R = micros()%255; Serial.print("R: "); Serial.print(R); Serial.print("\t");
-    int G = micros()%255; Serial.print("G: "); Serial.print(G); Serial.print("\t");
-    int B = micros()%255; Serial.print("B: "); Serial.print(B); Serial.print("\r\n");
-    pixels.setPixelColor(0, pixels.Color(i * 255, j * 255, k * 255)); 
+  String r = root["r"];   Serial.print("r: ");    Serial.println(r);
+  String g = root["g"];   Serial.print("g: ");    Serial.println(g);
+  String b = root["b"];   Serial.print("b: ");    Serial.println(b);
+
+    pixels.setPixelColor(0, pixels.Color(r.toInt(), g.toInt(), b.toInt())); 
     pixels.show(); // This sends the updated pixel color to the hardware
-  }
+  
 }
 
 void reconnect() {
@@ -108,8 +101,7 @@ void reconnect() {
       // Once connected, publish an announcement...
       client.publish("compvter/presentations", nodeId);
       // ... and resubscribe
-      client.subscribe("compvter/CPVWM03/actions");
-      client.subscribe("compvter/actions");
+      client.subscribe("compvter/web/rgb");
       digitalWrite(BUILTIN_LED,LOW);
     } else {
       Serial.print("failed, rc=");
